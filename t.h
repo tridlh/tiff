@@ -22,8 +22,10 @@
 #include <unistd.h>
 #include <sys/types.h>
 #include <getopt.h>
+#include <sys/time.h>
 
 #define FILENAMESZ  40
+#define CLKNUM      10
 
 #define BUFSIZE	12
 #define IFDNUM	40
@@ -56,6 +58,12 @@ typedef unsigned short  Uint16;
 typedef unsigned int    Uint32;
 
 typedef Uint8		uint8_t;
+
+typedef struct {
+    struct timeval start;
+    struct timeval end;
+    struct timezone tz;
+}   s_clock;
 
 typedef struct {
     char *file;
@@ -101,6 +109,7 @@ typedef struct {
     char bufbps[OUTBPSSIZE];   //bits per sample array
     char bufifd[OUTIFDNUM][IFDSIZE];
     s_tifbuf buf;
+    s_clock clk[CLKNUM];
 }    s_tifinfo;
 
 #if DEBUG_LOG

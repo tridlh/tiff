@@ -17,7 +17,8 @@
 //#define DEBUG_TAGINFO     1
 //#define DEBUG_LOG   1
 /* output tiff block order: 0: head-img-ifd-bps; 1: head-ifd-bps-img */
-#define OUTORDER    0                   
+#define OUTORDER    0    
+#define PERFORMANCE_PROFILING   1
 
 #include "t.h"
 
@@ -37,7 +38,8 @@ int main(int argc, char *argv[])
     ret = readtif(&inf);
     if (ret < 0) goto finish;
 
-    process(&inf);
+    ret = process(&inf);
+    if (ret < 0) goto finish;
 
     ret = savetif(&inf);
     if (ret < 0) goto finish;
@@ -55,7 +57,7 @@ void init(s_tifinfo *i){
     //char defaultname[] = "res/jupiter.tif";
 
     memset(i, 0, sizeof(s_tifinfo));
-    Loge("%d bytes cleared", sizeof(s_tifinfo));    //(292, 320)
+    Log("%d bytes cleared", sizeof(s_tifinfo));
     
     strncpy(i->fname, defaultname, sizeof(defaultname));
     i->ibn = -1;
@@ -141,7 +143,7 @@ int argproc(s_tifinfo *i, int argc, char *argv[]) {
             break;
 
         case 'i':
-            printf ("option d with value '%s' len %d\n", optarg, strlen(optarg));
+            printf ("option %c with value '%s' len %d\n", c, optarg, strlen(optarg));
             if (strlen(optarg) <  FILENAMESZ) {
                 memset(i->fname, 0, FILENAMESZ);
                 strncpy(i->fname, optarg, strlen(optarg));
@@ -151,7 +153,7 @@ int argproc(s_tifinfo *i, int argc, char *argv[]) {
             break;
 
         case 'r':
-            printf ("option d with value '%s' len %d\n", optarg, strlen(optarg));
+            printf ("option %c with value '%s' len %d\n", c, optarg, strlen(optarg));
             char tmpbuf[4];
             strncpy(tmpbuf, optarg, 4);
             i->rotate = s2i(tmpbuf, 4);
@@ -285,6 +287,11 @@ int process(s_tifinfo *i){
     if ((sc = calloc(sizeof(char),compsize)) == NULL) {ret = -1; goto err1;} 
     if ((dc = calloc(sizeof(char),compsize)) == NULL) {ret = -1; goto err2;}    
 
+    /* peformance profiling start */
+#if PERFORMANCE_PROFILING
+    gettimeofday(&(i->clk[0].start), &(i->clk[0].tz));
+#endif
+    
     for (ii = 0; ii < n; ii++) {
         for (jj = 0; jj < compsize; jj++) {
             sc[jj] = i->buf.src[jj*n + ii];        
@@ -313,6 +320,17 @@ int process(s_tifinfo *i){
             i->buf.dst[jj*n + ii] = dc[jj];        
         }    
     } 
+
+    /* peformance profiling end */
+#if PERFORMANCE_PROFILING
+    gettimeofday(&(i->clk[0].end), &(i->clk[0].tz));
+    {
+        long start = i->clk[0].start.tv_sec * 1000000 + i->clk[0].start.tv_usec;
+        long end   = i->clk[0].end.tv_sec * 1000000   + i->clk[0].end.tv_usec;;
+        long cpu_time_used = end - start;
+        Loge("cputime cost = [%d] us = [%.3f] ms", cpu_time_used, (double)cpu_time_used/1000.0);
+    }
+#endif
 
     if (i->vhchanged == 1) {          
         int itw = tagbufpos(i, TAGWID);
