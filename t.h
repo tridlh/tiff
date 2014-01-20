@@ -91,8 +91,10 @@ typedef struct {
     int cmp;    //compression = 1;
     int biz;    //blackiszero = 1;
     int sof;    //stripoffset = 0;
+    int soo;    //strip offset offset
     int spp;    //sampleperpixel = 0;
     int sbc;    //stripbytecnt = 0;
+    int sbo;    //strip bytecnt offset
     int cfg;    //planarcfg = 0;
     /* misc var*/
     int nst;    //strip number

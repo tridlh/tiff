@@ -261,28 +261,30 @@ int readtif(s_tifinfo *i) {
     }
    
     tmp = i->wid * i->len * i->spp;
-    i->isize = i->nst * i->sbc;
+    i->isize = i->sbc;
     if (i->isize < tmp) {
         if (i->cmp == 32773) {
-            Loge("Warning: Packbits compression");
+            Loge("Warning: Packbits compression");            
+            if ((i->buf.src = calloc(sizeof(char),tmp)) == NULL) {return -1;}    
+            if ((i->buf.dst = calloc(sizeof(char),tmp)) == NULL) {return -1;}
         } else {
             Loge("Error: image size not match: %x %x", i->isize, tmp);
             return -1;
         }
+    } else {
+        if ((i->buf.src = calloc(sizeof(char),i->isize)) == NULL) {return -1;}    
+        if ((i->buf.dst = calloc(sizeof(char),i->isize)) == NULL) {return -1;}
     }
-
-    tmp = prtinfo(i);
-    if (tmp != 0) {
-        Loge("prtinfo error");
-        return -1;
-    }
-
-    if ((i->buf.src = calloc(sizeof(char),i->isize)) == NULL) {return -1;}    
-    if ((i->buf.dst = calloc(sizeof(char),i->isize)) == NULL) {return -1;}
 
     tmp = imginfo(i);
     if (tmp != 0) {
         Loge("read image data error");
+        return -1;
+    }
+    
+    tmp = prtinfo(i);
+    if (tmp != 0) {
+        Loge("prtinfo error");
         return -1;
     }
 
@@ -351,6 +353,12 @@ int process(s_tifinfo *i){
         int cnt = 0;
         for (cnt = 0; cnt < 4; cnt++)
             swap(i->bufifd[itl] + 8 + cnt, i->bufifd[itw] + 8 + cnt);
+    }
+    /* adjust output file */
+    {
+        int tag = tagbufpos(i, TAGCMP);
+        i->cmp = 1;
+        val2str(i->cmp, TYPE_LONG, i->bufifd[tag] + 8, i->ibn);
     }
     
     free(sc);
@@ -512,18 +520,33 @@ int tiffinfo(s_tifinfo *i){
         case TAGCMP:    i->cmp = val; break;
         case TAGBIZ:    i->biz = val; break;
         case TAGSOF:
-            if (cnt == 1)
+            if (cnt == 1) {
+                i->soo = 0;
                 i->sof = val;
-            else
+            }
+            else {
+                i->soo = val;   //offset of the first strip offset
                 i->sof = str2int32(i->buf.file + val, endian); 
+            }
             break;
         case TAGSPP:    i->spp = val; break; 
         case TAGSBC:
             i->nst = cnt; 
-            if (i->nst == 1)
+            if (i->nst == 1) {
+                i->sbo = 0;
                 i->sbc = val;
-            else
-                i->sbc = str2int32(i->buf.file + val, endian); 
+            }
+            else {
+                int sz = 0;
+                int ii = 0;
+                i->sbo = val;   //offset of the first strip size
+                for (ii = 0; ii < i->nst; ii++) {
+                    sz += str2int32(i->buf.file + i->sbo, endian);
+                    i->sbo += 4;
+                }
+                i->sbo = val;
+                i->sbc = sz;
+            }
             break; 
         case TAGCFG:    i->cfg = valadj(typ, buf+8, endian); break; 
     }
@@ -543,11 +566,54 @@ int tiffinfo(s_tifinfo *i){
 }
 
 int imginfo(s_tifinfo *i) {
-    if (i->cmp == 1) {
+    if (i->nst == 1) {
         memcpy(i->buf.src, i->buf.file + i->sof, i->isize);
-    } else if (i->cmp == 32773) {
-        Loge("Packetbits compression!");
-        return -1;
+    } else {
+        int isrc, ifile, sz, cnt, soo, sbo;
+        isrc = ifile = sz = 0;
+        soo = i->soo;
+        sbo = i->sbo;
+        for (cnt = 0; cnt < i->nst; cnt++) {
+            ifile = str2int32(i->buf.file + soo, i->ibn);
+            sz = str2int32(i->buf.file + sbo, i->ibn);
+            memcpy(i->buf.src + isrc, i->buf.file + ifile, sz);
+            isrc += sz;
+            soo += 4;
+            sbo += 4;
+            Log("copy from %x size %x", ifile, sz);
+        }
+        Log("%d %x %d", isrc, isrc, i->isize);
+    }
+    if (i->cmp == 32773) {
+        int isrc, idst, tmp, imgsz;
+        char n = 0;        
+        isrc = idst = tmp = 0;
+        imgsz = i->wid * i->len * i->spp;
+        do {
+            memcpy(&n, i->buf.src + isrc, 1);
+            isrc++;
+            if (n >= 0) {
+                memcpy(i->buf.dst + idst, i->buf.src + isrc, n + 1);
+                isrc += (n + 1);
+                idst += (n + 1);
+            } else if ((n >= -127) && (n <= -1)) {
+                tmp = 1 - n;
+                while (tmp > 0) {
+                    memcpy(i->buf.dst + idst, i->buf.src + isrc, 1);
+                    idst++;
+                    tmp--;
+                };
+                isrc++;
+            } else if (n == -128) {
+                Log("pass n");
+            } 
+        } while (isrc < i->isize);
+        if (idst != imgsz) {
+            Loge("%d %d %d", idst, isrc, imgsz);
+            return -1;
+        }
+        memcpy(i->buf.src, i->buf.dst, imgsz);
+        i->isize = imgsz;
     }
     return 0;
 }
@@ -565,6 +631,8 @@ int prtinfo(s_tifinfo *i) {
     Log("  stripbytecnt:    %8d", i->sbc); 
     Log("  planarcfg:       %8d", i->cfg); 
     Log("  image size:      %8d", i->isize); 
+    Log("  strip offs off:0x%8x", i->soo); 
+    Log("  strip size off:0x%8x", i->sbo); 
     return 0;
 }
 
