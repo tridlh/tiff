@@ -411,13 +411,14 @@ int savetif(s_tifinfo *i) {
         val2str(i->bof,    TYPE_LONG,  i->bufifd[idx] + 8, i->ibn);
         i->iof = i->bof + OUTBPSSIZE;
     }
-    
+
+    i->nst = 1;
     idx = tagbufpos(i, TAGSOF);
-    val2str(1,      TYPE_LONG,                             i->bufifd[idx] + 4, i->ibn);
+    val2str(i->nst,      TYPE_LONG,                             i->bufifd[idx] + 4, i->ibn);
     val2str(i->iof, str2int16(i->bufifd[idx] + 2, i->ibn), i->bufifd[idx] + 8, i->ibn);
     
     idx = tagbufpos(i, TAGSBC);
-    val2str(1,        TYPE_LONG,                             i->bufifd[idx] + 4, i->ibn);
+    val2str(i->nst,        TYPE_LONG,                             i->bufifd[idx] + 4, i->ibn);
     val2str(i->isize, str2int16(i->bufifd[idx] + 2, i->ibn), i->bufifd[idx] + 8, i->ibn);
         
     ret = fwrite(i->bufifd, sizeof(char), OUTIFDNUM * IFDSIZE, fpout);
@@ -464,13 +465,14 @@ int savetif(s_tifinfo *i) {
         val2str(i->bof,     TYPE_LONG,  i->bufifd[idx] + 8, i->ibn);
         i->end = i->bof + OUTBPSSIZE;
     }
-    
+
+    i->nst = 1;
     idx = tagbufpos(i, TAGSOF);
-    val2str(1,      TYPE_LONG,                             i->bufifd[idx] + 4, i->ibn);
+    val2str(i->nst,      TYPE_LONG,                             i->bufifd[idx] + 4, i->ibn);
     val2str(i->iof, str2int16(i->bufifd[idx] + 2, i->ibn), i->bufifd[idx] + 8, i->ibn);    
 
     idx = tagbufpos(i, TAGSBC);
-    val2str(1,        TYPE_LONG,                             i->bufifd[idx] + 4, i->ibn);
+    val2str(i->nst,        TYPE_LONG,                             i->bufifd[idx] + 4, i->ibn);
     val2str(i->isize, str2int16(i->bufifd[idx] + 2, i->ibn), i->bufifd[idx] + 8, i->ibn);       
 
     ret = fwrite(i->bufifd, sizeof(char), OUTIFDNUM * IFDSIZE, fpout);
