@@ -119,7 +119,12 @@ typedef struct {
             printf(__VA_ARGS__); \
             printf("\n"); \
         } while(0)
-    #define Loge(...)   Log(...)
+    #define Loge(...) \
+        do { \
+            printf("%s %-10s [%d]:",__FILE__, __func__, __LINE__); \
+            printf(__VA_ARGS__); \
+            printf("\n"); \
+        } while(0)
 #else
     #define Log(...)
     #define Loge(...)\
@@ -147,9 +152,9 @@ int loadtif(s_tifinfo *i);
 int readtif(s_tifinfo *i);
 int process(s_tifinfo *i);
 int savetif(s_tifinfo *i);
-void tiffinfo(s_tifinfo *i);
-void imginfo(s_tifinfo *i);
-void prtinfo(s_tifinfo *i);
+int tiffinfo(s_tifinfo *i);
+int imginfo(s_tifinfo *i);
+int prtinfo(s_tifinfo *i);
 
 Uint16 str2int16(Uint8* buf, int endian);
 Uint32 str2int32(Uint8* buf, int endian);

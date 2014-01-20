@@ -208,7 +208,7 @@ end:
 int readtif(s_tifinfo *i) {
     int tmp = 0;
     if (!i || !(i->buf.file)) {
-        Log("Invalid buffer");
+        Loge("Invalid buffer");
         return -1;
     }
     char *buf = i->buf.file;
@@ -221,7 +221,7 @@ int readtif(s_tifinfo *i) {
         i->ibn = 1;
     }
     if (i->ibn < 0) {
-        Log("Invalid endian");
+        Loge("Invalid endian");
         return -1;
     }
     memcpy(i->bufthd, buf, 4);
@@ -230,7 +230,7 @@ int readtif(s_tifinfo *i) {
     buf = i->buf.file + i->buf.ifile;
     i->id = str2int16(buf, i->ibn); 
     if (i->id != 42) {
-        Log("Invalid id");
+        Loge("Invalid id");
         return -1;
     }
 
@@ -242,7 +242,7 @@ int readtif(s_tifinfo *i) {
     buf = i->buf.file + i->buf.ifile;
     i->nif = str2int16(buf, i->ibn);
     if (i->nif > IFDNUM) {
-        Log("Invalid ifd item number");
+        Loge("Invalid ifd item number");
         return -1;
     }
 
@@ -256,23 +256,35 @@ int readtif(s_tifinfo *i) {
     buf = i->buf.file + i->buf.ifile;
     i->nof = str2int32(buf, i->ibn);
     if (i->nof != 0) {
-        Log("Invalid next ifd offset");
+        Loge("Invalid next ifd offset");
         return -1;
     }
    
     tmp = i->wid * i->len * i->spp;
     i->isize = i->nst * i->sbc;
     if (i->isize < tmp) {
-        Log("Warning: image size not match: %x %x", i->isize, tmp);
-        return -1;
+        if (i->cmp == 32773) {
+            Loge("Warning: Packbits compression");
+        } else {
+            Loge("Error: image size not match: %x %x", i->isize, tmp);
+            return -1;
+        }
     }
 
-    prtinfo(i);
+    tmp = prtinfo(i);
+    if (tmp != 0) {
+        Loge("prtinfo error");
+        return -1;
+    }
 
     if ((i->buf.src = calloc(sizeof(char),i->isize)) == NULL) {return -1;}    
     if ((i->buf.dst = calloc(sizeof(char),i->isize)) == NULL) {return -1;}
 
-    imginfo(i);
+    tmp = imginfo(i);
+    if (tmp != 0) {
+        Loge("read image data error");
+        return -1;
+    }
 
     return 0;
 }
@@ -328,7 +340,8 @@ int process(s_tifinfo *i){
         long start = i->clk[0].start.tv_sec * 1000000 + i->clk[0].start.tv_usec;
         long end   = i->clk[0].end.tv_sec * 1000000   + i->clk[0].end.tv_usec;;
         long cpu_time_used = end - start;
-        Loge("cputime cost = [%d] us = [%.3f] ms", cpu_time_used, (double)cpu_time_used/1000.0);
+        Loge("%dx%d, %s pattern process: cputime = [%d] us = [%.3f] ms", \
+            i->wid, i->len, (i->spp == 1)?"Grey":"Color", cpu_time_used, (double)cpu_time_used/1000.0);
     }
 #endif
 
@@ -467,7 +480,7 @@ end:
     return ret;
 }
 
-void tiffinfo(s_tifinfo *i){
+int tiffinfo(s_tifinfo *i){
     char *buf = i->buf.file + i->buf.ifile;
     int endian = i->ibn;
     int tag = str2int16(buf, endian);
@@ -475,10 +488,10 @@ void tiffinfo(s_tifinfo *i){
     int cnt = str2int32(buf+4, endian);
     int val = valadj(typ, buf+8, endian);
 #if DEBUG_TAGINFO
-    Log("  TAG:        %8d[0x%8x]", tag, tag); 
-    Log("  Field type: %8d[0x%8x]", typ, typ); 
-    Log("  Count:      %8d[0x%8x]", cnt, cnt); 
-    Log("  Value:      %8d[0x%8x]", val, val); 
+    Loge("  TAG:        %8d[0x%8x]", tag, tag); 
+    Loge("  Field type: %8d[0x%8x]", typ, typ); 
+    Loge("  Count:      %8d[0x%8x]", cnt, cnt); 
+    Loge("  Value:      %8d[0x%8x]", val, val); 
 #endif
 
     switch (tag) {
@@ -525,14 +538,21 @@ void tiffinfo(s_tifinfo *i){
         case TAGSPP:    memcpy(i->bufifd[6], buf, IFDSIZE); break;
         case TAGSBC:    memcpy(i->bufifd[7], buf, IFDSIZE); break;
         case TAGCFG:    memcpy(i->bufifd[8], buf, IFDSIZE); break;
-    } 
+    }
+    return 0;
 }
 
-void imginfo(s_tifinfo *i) {
-    memcpy(i->buf.src, i->buf.file + i->sof, i->isize);
+int imginfo(s_tifinfo *i) {
+    if (i->cmp == 1) {
+        memcpy(i->buf.src, i->buf.file + i->sof, i->isize);
+    } else if (i->cmp == 32773) {
+        Loge("Packetbits compression!");
+        return -1;
+    }
+    return 0;
 }
 
-void prtinfo(s_tifinfo *i) {  
+int prtinfo(s_tifinfo *i) {  
     Log("  imgwidth:        %8d", i->wid); 
     Log("  imglenth:        %8d", i->len); 
     Log("  bps offset:      %8d", i->bof);
@@ -545,6 +565,7 @@ void prtinfo(s_tifinfo *i) {
     Log("  stripbytecnt:    %8d", i->sbc); 
     Log("  planarcfg:       %8d", i->cfg); 
     Log("  image size:      %8d", i->isize); 
+    return 0;
 }
 
 Uint16 str2int16(Uint8* buf, int endian){
