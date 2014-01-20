@@ -24,16 +24,65 @@
 int main(int argc, char *argv[])
 {
     int ret = 0;
-    char fname[FILENAMESZ] = {0};
     s_tifinfo inf;
-    int op = 0;
 
-    Uint8 defaultname[] = "res/lena512color.tiff";
-    //Uint8 defaultname[] = "res/jupiter.tif";
-    
-    strncpy(fname, defaultname, sizeof(defaultname));
     init(&inf);
     
+    ret = argproc(&inf, argc, argv);
+    if (ret < 0) goto finish;
+
+    ret = loadtif(&inf);
+    if (ret < 0) goto finish;
+
+    ret = readtif(&inf);
+    if (ret < 0) goto finish;
+
+    process(&inf);
+
+    ret = savetif(&inf);
+    if (ret < 0) goto finish;
+
+    
+finish:
+    Log("Finishing...");
+    uninit(&inf);
+   
+    return 0;
+}
+
+void init(s_tifinfo *i){    
+    char defaultname[] = "res/lena_color_512.tif";
+    //char defaultname[] = "res/jupiter.tif";
+
+    memset(i, 0, sizeof(s_tifinfo));
+    Loge("%d bytes cleared", sizeof(s_tifinfo));    //(292, 320)
+    
+    strncpy(i->fname, defaultname, sizeof(defaultname));
+    i->ibn = -1;
+    i->cmp = 1;
+    i->biz = 1;
+}
+
+void uninit(s_tifinfo *i) {
+    if (i->buf.file != NULL) {
+        Log("file: %x", i->buf.file);
+        free(i->buf.file);
+        i->buf.file = NULL;
+    }
+    if (i->buf.src != NULL) {
+        Log("src: %x", i->buf.src);
+        free(i->buf.src);
+        i->buf.src = NULL;
+    }
+    if (i->buf.dst != NULL) {
+        Log("dst: %x", i->buf.dst);
+        free(i->buf.dst);
+        i->buf.dst = NULL;
+    }
+}
+
+int argproc(s_tifinfo *i, int argc, char *argv[]) {
+    int ret = 0;
     int c;
     int digit_optind = 0;
     
@@ -94,8 +143,8 @@ int main(int argc, char *argv[])
         case 'i':
             printf ("option d with value '%s' len %d\n", optarg, strlen(optarg));
             if (strlen(optarg) <  FILENAMESZ) {
-                memset(fname, 0, FILENAMESZ);
-                strncpy(fname, optarg, strlen(optarg));
+                memset(i->fname, 0, FILENAMESZ);
+                strncpy(i->fname, optarg, strlen(optarg));
             } else {
                 Loge("file name length over limit: %d", FILENAMESZ);
             }
@@ -105,11 +154,11 @@ int main(int argc, char *argv[])
             printf ("option d with value '%s' len %d\n", optarg, strlen(optarg));
             char tmpbuf[4];
             strncpy(tmpbuf, optarg, 4);
-            inf.rotate = s2i(tmpbuf, 4);
-            inf.rotate %= 360;
-            if(inf.rotate % 90) {
-                Loge("rotate: %d, round to 0", inf.rotate); 
-                inf.rotate = 0;
+            i->rotate = s2i(tmpbuf, 4);
+            i->rotate %= 360;
+            if(i->rotate % 90) {
+                Loge("rotate: %d, round to 0", i->rotate); 
+                i->rotate = 0;
             }
             break;
     
@@ -125,92 +174,21 @@ int main(int argc, char *argv[])
         printf ("\n");
     }
 
-    ret = loadtif(&inf, fname);
-    if (ret < 0) goto finish;
-
-    ret = readtif(&inf);
-    if (ret < 0) goto finish;
-
-    process(&inf, op);
-
-    ret = savetif(&inf);
-    if (ret < 0) goto finish;
-
-    
-finish:
-    Log("Finishing...");
-    uninit(&inf);
-   
-    return 0;
+    return ret;
 }
 
-void init(s_tifinfo *i){
-    i->ibn = -1;
-    i->id = 0;
-    i->ifd = 0;
-    i->nif = 0;
-    i->bof = 0;
-    i->nof = 0;
-    i->iof = 0;
-    i->wid = 0;
-    i->len = 0;
-    i->bps[0] = i->bps[1] = i->bps[2] = 0;
-    i->cmp = 1;
-    i->biz = 1;
-    i->sof = 0;
-    i->spp = 0;
-    i->sbc = 0;
-    i->cfg = 0;
-    i->nst = 0;
-    i->fsize = 0;
-    i->isize = 0;
-    i->rotate = 0;
-    i->vhchanged = 0;
-    
-    memset(i->bufthd, 0, OUTTHDSIZE);
-    memset(i->bufihd, 0, OUTIHDSIZE);
-    memset(i->bufnof, 0, OUTNOFSIZE);
-    memset(i->bufbps, 0, OUTBPSSIZE);
-    memset(i->bufifd, 0, OUTIFDNUM * IFDSIZE);
-
-    i->buf.file = NULL;
-    i->buf.ifile = 0;
-    i->buf.src = NULL;
-    i->buf.isrc = 0;
-    i->buf.dst = NULL;
-    i->buf.idst = 0;
-}
-
-void uninit(s_tifinfo *i) {
-    if (i->buf.file != NULL) {
-        Log("file: %x", i->buf.file);
-        free(i->buf.file);
-        i->buf.file = NULL;
-    }
-    if (i->buf.src != NULL) {
-        Log("src: %x", i->buf.src);
-        free(i->buf.src);
-        i->buf.src = NULL;
-    }
-    if (i->buf.dst != NULL) {
-        Log("dst: %x", i->buf.dst);
-        free(i->buf.dst);
-        i->buf.dst = NULL;
-    }
-}
-
-int loadtif(s_tifinfo *i, char *serialFileName){
+int loadtif(s_tifinfo *i){
     int ret = 0;
     FILE *fp = NULL;
-    if ((fp = fopen(serialFileName, "rb")) == NULL){
-        fprintf (stderr, "Input file '%s' does not exist !!\n", serialFileName);
+    if ((fp = fopen(i->fname, "rb")) == NULL){
+        fprintf (stderr, "Input file '%s' does not exist !!\n", i->fname);
         ret = -1;
         goto end;
     } else {
         fseek(fp, 0L, SEEK_END);
         i->fsize = ftell(fp);
         rewind(fp);
-        Log("Open inputfile '%s' [%ld bytes] succeed.", serialFileName, i->fsize);
+        Log("Open inputfile '%s' [%ld bytes] succeed.", i->fname, i->fsize);
     }
     
     if ((i->buf.file = calloc(sizeof(char),i->fsize)) == NULL) {ret = -1; goto end;}
@@ -297,7 +275,7 @@ int readtif(s_tifinfo *i) {
     return 0;
 }
 
-int process(s_tifinfo *i, int op){
+int process(s_tifinfo *i){
     int ii, jj;
     char *sc = NULL;
     char *dc = NULL;
@@ -663,7 +641,7 @@ int s2i(Uint8 *s, int cnt) {
     int i = 0;
     int num = 0;
     while (s[i]) {
-        Loge("%4d", s[i]);
+        Log("%4d", s[i]);
         if (s[i] > '9' || s[i] < '0')
             return -1;
         else {

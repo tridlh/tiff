@@ -92,7 +92,9 @@ typedef struct {
     int isize;  //image size, ==wid*len*spp, ==sbc*nst 
     int rotate; //rotate angle: 0, 90, 180, 270
     int vhchanged;
+    int op;     //image operation
     /* buffers */
+    char fname[FILENAMESZ];    //input file name
     char bufthd[OUTTHDSIZE];   //tif head
     char bufihd[OUTIHDSIZE];   //ifd head
     char bufnof[OUTNOFSIZE];   //ifd next index offset, always 0
@@ -131,9 +133,10 @@ int getopt_long(int argc, char * const argv[],
 
 void init(s_tifinfo *i);
 void uninit(s_tifinfo *i);
-int loadtif(s_tifinfo *i, char *serialFileName);
+int argproc(s_tifinfo *i, int argc, char *argv[]);
+int loadtif(s_tifinfo *i);
 int readtif(s_tifinfo *i);
-int process(s_tifinfo *i, int op);
+int process(s_tifinfo *i);
 int savetif(s_tifinfo *i);
 void tiffinfo(s_tifinfo *i);
 void imginfo(s_tifinfo *i);
