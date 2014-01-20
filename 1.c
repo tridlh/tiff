@@ -276,17 +276,18 @@ int readtif(s_tifinfo *i) {
 }
 
 int process(s_tifinfo *i){
+    int ret = 0;
     int ii, jj;
     char *sc = NULL;
     char *dc = NULL;
-    int bytespersample = 3;
+    int n = i->spp;
     int compsize = i->wid * i->len;
-    if ((sc = calloc(sizeof(char),compsize)) == NULL) {return -1;} 
-    if ((dc = calloc(sizeof(char),compsize)) == NULL) {return -1;}    
+    if ((sc = calloc(sizeof(char),compsize)) == NULL) {ret = -1; goto err1;} 
+    if ((dc = calloc(sizeof(char),compsize)) == NULL) {ret = -1; goto err2;}    
 
-    for (ii = 0; ii < bytespersample; ii++) {
+    for (ii = 0; ii < n; ii++) {
         for (jj = 0; jj < compsize; jj++) {
-            sc[jj] = i->buf.src[jj*bytespersample + ii];        
+            sc[jj] = i->buf.src[jj*n + ii];        
         }                
 
         switch (i->rotate) {
@@ -309,7 +310,7 @@ int process(s_tifinfo *i){
         }
 
         for (jj = 0; jj < compsize; jj++) {            
-            i->buf.dst[jj*bytespersample + ii] = dc[jj];        
+            i->buf.dst[jj*n + ii] = dc[jj];        
         }    
     } 
 
@@ -322,7 +323,11 @@ int process(s_tifinfo *i){
     }
     
     free(sc);
+err2:
     free(dc);
+err1:
+
+    return ret;
 }
 
 int savetif(s_tifinfo *i) {
